@@ -71,6 +71,8 @@ Native Fund
 
 ```
 Env env(*this, features);
+auto const alice = Account("alice");
+auto const bob = Account("bob");
 env.fund(XRP(10000), alice, bob);
 env.close();
 ```
@@ -78,6 +80,10 @@ env.close();
 Token Fund
 
 ```
+auto const alice = Account("alice");
+auto const bob = Account("bob");
+auto const gw = Account{"gateway"};
+auto const USD = gw["USD"];
 Env env(*this, features);
 env.fund(XRP(10000), alice, bob, gw);
 env.close();
@@ -105,11 +111,13 @@ Add Flags to tx
 
 Balance against XRP or Token
 
-`env.require(balance(alice, XRP(4000)));`
+`env.require(balance(alice, USD(4000)));`
 
 Balance with variables
 
 `env.require(balance(alice, XRP(4000) - drops(10)));`
+
+`env.require(balance(alice, USD(4000) - USD(10)));`
 
 Pre & Post for transaction result variables
 
