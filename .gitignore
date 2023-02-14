@@ -2,6 +2,7 @@
 /py
 /ts
 
+.DS_Store
 .vscode
 
 NOTES.md
