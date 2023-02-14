@@ -1,6 +1,6 @@
 # XRPL - RIPPLED Cheatsheet
 
-## Setup ENV
+## Setup ENV - OLD
 
 `xcode-select --install`
 
@@ -8,32 +8,57 @@
 
 `brew install git cmake pkg-config protobuf openssl ninja`
 
-```
-cd /LOCATION/OF/YOUR/BOOST/DIRECTORY
-./bootstrap.sh
-./b2 cxxflags="-std=c++14"
-```
 
-`sudo nano ~/.zshrc`
-
-```
-echo "export BOOST_ROOT=/Users/dustedfloor/projects/BoostBuilds/boost_1_77_0" >> ~/.zshrc
-```
-
-`source ~/.zshrc`
+## Setup ENV - CONAN
 
 Create Build and Config
-`mkdir build && cd build && cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug ..`
 
-Build and test single file
-`cmake --build . -- -j 4 && ./rippled -u ripple.app.PayChan`
+```
+conan export external/rocksdb
+mkdir .build && cd .build
+conan install .. --output-folder . --build missing --settings build_type=Debug
+cmake -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -Dassert=ON \
+    -Dcoverage=OFF \
+    -Dreporting=OFF \
+    -Dunity=OFF \
+    ..
+cmake --build . --target rippled --parallel 8 && ./rippled -u ripple.tx.URIToken
+```
+
+Test rippled
+
+`./rippled --unittest --unittest-jobs 8`
+
+
+## LINTING
+
+Install Clang Format
+
+`brew install clang-format`
+
+Run clang format
+
+1. Find out the failing tests
+
+`git-clang-format --extensions c,cpp,h,cxx,ipp develop`
+
+`find src/ripple -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.ipp' \) -print0 | xargs -0 clang-format-10 -i`
+
+2. Run clang-format against the file
+
+`clang-format -style=file:./.clang-format -i src/**/*.cpp`
+`clang-format -i src/ripple/app/paths/TrustLine.h`
 
 Run one test
 
 `./rippled --unittest=ripple.app.PayChan`
 `./rippled --unittest=ripple.app.Escrow`
-`/rippled --unittest=ripple.tx.NFToken`
-`/rippled --unittest=ripple.app.RPCCall`
+`./rippled --unittest=ripple.tx.NFToken`
+`./rippled --unittest=ripple.app.RPCCall`
+`./rippled --unittest=ripple.ledger.Invariants`
 
 ## Debug in M1
 
@@ -53,116 +78,8 @@ Set Breakpoint to file
 `breakpoint set --file net/impl/RPCCall.cpp -l 799`
 `breakpoint set --file rpc/handlers/PayChanClaim.cpp -l 79`
 `breakpoint set --file rpc/handlers/AccountChannels.cpp -l 79`
+`breakpoint set --file tx/impl/ApplyContext.cpp -l 150`
 
 Step in BP
 
 `continue`
-
-Print Out
-
-`std::cout << "PRE ALICE: "" << preAlice << "\n";`
-
-## Writing Tests
-
-
-### Test Runner - Funding & Setup
-
-Native Fund
-
-```
-Env env(*this, features);
-auto const alice = Account("alice");
-auto const bob = Account("bob");
-env.fund(XRP(10000), alice, bob);
-env.close();
-```
-
-Token Fund
-
-```
-auto const alice = Account("alice");
-auto const bob = Account("bob");
-auto const gw = Account{"gateway"};
-auto const USD = gw["USD"];
-Env env(*this, features);
-env.fund(XRP(10000), alice, bob, gw);
-env.close();
-env.trust(USD(100000), alice);
-env.trust(USD(100000), bob);
-env.close();
-env(pay(gw, alice, USD(10000)));
-env(pay(gw, bob, USD(10000)));
-env.close();
-```
-
-Set Account Flags
-
-`env(fset(gw, asfGlobalFreeze));`
-
-Clear Account Flags
-
-`env(fclear(gwF, asfGlobalFreeze));`
-
-Add Flags to tx
-
-`env(trust(gw, bobUSD(10000)), txflags(tfSetfAuth));`
-
-### Checking Balances
-
-Balance against XRP or Token
-
-`env.require(balance(alice, USD(4000)));`
-
-Balance with variables
-
-`env.require(balance(alice, XRP(4000) - drops(10)));`
-
-`env.require(balance(alice, USD(4000) - USD(10)));`
-
-Pre & Post for transaction result variables
-
-```
-auto const preValue = myFunction(env, alice, gw, USD);
-// env function call ex. env(pay(...));
-// env close ex. env.close();
-auto const postValue = myFunction(env, alice, gw, USD);
-env.require(postValue, preValue + USD(1000));
-```
-
-### Checking Ledger Entries
-
-Example below is reading the PayChan ledger entry at `chan` which is the hash/id.
-
-```
-static STAmount
-channelBalance(ReadView const& view, uint256 const& chan)
-{
-    auto const slep = view.read({ltPAYCHAN, chan});
-    if (!slep)
-        return XRPAmount{-1};
-    return (*slep)[sfBalance];
-}
-```
-
-### Checking Keylets
-
-Example below is reading the users trustline and getting the value for `sfLockedBalance`.
-
-```
-static STAmount
-lockedAmount(
-    jtx::Env const& env,
-    jtx::Account const& account,
-    jtx::Account const& gw,
-    jtx::IOU const& iou)
-{
-    auto const sle = env.le(keylet::line(account, gw, iou.currency));
-    return -(*sle)[sfLockedBalance];
-}
-```
-
-### Testing Tx Submit Failures
-
-Add the `ter` argument after the function call.
-
-`env(claim(bob, chan, delta, delta), ter(temBAD_SIGNATURE));`
